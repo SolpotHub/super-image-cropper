@@ -2,19 +2,23 @@ import type Cropper from 'cropperjs';
 import { Decoder } from './lib/decoder';
 import { SyntheticGIF } from './lib/synthetic-gif';
 import { FrameCropper } from './lib/cropper';
-import { getImageInfo, loadImage, getImageType, IImageTypeInfo } from './lib/helper';
+import {
+  getImageInfo,
+  loadImage,
+  IImageLoadData
+} from './lib/helper';
 import type { IParsedFrameInfo } from './lib/decoder';
 export interface CustomCropper extends Cropper {
   url: '';
   cropBoxData: Cropper.ImageData;
   canvasData: Cropper.ImageData;
-  cropper?: HTMLDivElement
+  cropper?: HTMLDivElement;
 }
 
 export enum OutputType {
   BASE64 = 'base64',
   BLOB = 'blob',
-  BLOB_URL = 'blobURL',
+  BLOB_URL = 'blobURL'
 }
 
 export type IOutputTypeUnion = `${OutputType}`;
@@ -25,6 +29,7 @@ export interface ICropperOptions {
   cropperJsOpts?: ICropOpts;
   gifJsOptions?: IGifOpts;
   outputType?: IOutputTypeUnion;
+  quality?: number;
 }
 
 export interface IGifOpts {
@@ -63,7 +68,7 @@ export interface IImageData {
 export interface ICommonCropOptions {
   cropperJsOpts: Required<ICropOpts>;
   imageData: IImageData;
-  cropBoxData: Cropper.CropBoxData
+  cropBoxData: Cropper.CropBoxData;
 }
 
 export class SuperImageCropper {
@@ -72,19 +77,17 @@ export class SuperImageCropper {
   private commonCropOptions!: ICommonCropOptions;
   private frameCropperInstance!: FrameCropper;
   private inputCropperOptions!: ICropperOptions;
-  private imageTypeInfo: IImageTypeInfo | null = null;
+  // private imageTypeInfo: IImageTypeInfo | null = null;
 
-  public async crop(
-    inputCropperOptions: ICropperOptions
-  ): Promise<string | Blob> {
+  public async crop(inputCropperOptions: ICropperOptions): Promise<string | Blob> {
     this.userInputValidator(inputCropperOptions);
     this.inputCropperOptions = this.cleanUserInput(inputCropperOptions);
     await this.init();
     await this.decodeGIF();
-    
+
     const checkResult = await this.checkIsStaticImage();
     if (checkResult.isStatic) {
-      return this.handleStaticImage(checkResult.imageInfo.imageInstance)
+      return this.handleStaticImage(checkResult.imageInfo);
     } else {
       const resultFrames = await this.cropFrames();
       return this.saveGif(resultFrames, this.parsedFrameInfo?.delays || []);
@@ -104,26 +107,25 @@ export class SuperImageCropper {
       rotate: 0,
       left: 0,
       top: 0
-    }
+    };
     const targetConfig = Object.assign(
       defaultOptions,
       this.inputCropperOptions.cropperJsOpts || {},
       this.cropperJsInstance?.getData() || {}
     );
 
-    const imageData = this.cropperJsInstance?.getImageData()
-      || await getImageInfo({
+    const imageData =
+      this.cropperJsInstance?.getImageData() ||
+      (await getImageInfo({
         src: this.inputCropperOptions.src,
         crossOrigin: this.inputCropperOptions.crossOrigin
-      })
-      || {}
-    ;
-
+      })) ||
+      {};
     this.commonCropOptions = {
       cropperJsOpts: this.imageDataFormat(targetConfig, imageData),
       imageData,
-      cropBoxData: this.cropperJsInstance?.getCropBoxData() || targetConfig,
-    }
+      cropBoxData: this.cropperJsInstance?.getCropBoxData() || targetConfig
+    };
 
     this.commonCropOptions.cropperJsOpts.rotate = this.normalizeRotate(
       this.commonCropOptions.cropperJsOpts.rotate
@@ -134,7 +136,7 @@ export class SuperImageCropper {
     const { cropperInstance } = cropperOptions;
     if (cropperInstance) {
       delete cropperOptions['cropperJsOpts'];
-      delete cropperOptions['src']
+      delete cropperOptions['src'];
     }
     return cropperOptions;
   }
@@ -143,9 +145,9 @@ export class SuperImageCropper {
     const { cropperInstance, cropperJsOpts, src } = cropperOptions;
     if (!cropperInstance) {
       if (!cropperJsOpts) {
-        throw new Error('If cropperInstance is not specified, cropperJsOpts must be specified.')
+        throw new Error('If cropperInstance is not specified, cropperJsOpts must be specified.');
       } else if (!src) {
-        throw new Error('If cropperInstance is not specified, src must be specified.')
+        throw new Error('If cropperInstance is not specified, src must be specified.');
       }
     }
   }
@@ -193,7 +195,7 @@ export class SuperImageCropper {
       commonCropOptions: this.commonCropOptions,
       frameDelays,
       gifJsOptions: this.inputCropperOptions.gifJsOptions,
-      outputType: this.inputCropperOptions.outputType,
+      outputType: this.inputCropperOptions.outputType
     });
     return syntheticGIF.bootstrap();
   }
@@ -202,15 +204,16 @@ export class SuperImageCropper {
     const url = this.cropperJsInstance?.url ?? this.inputCropperOptions?.src;
     const imageInfo = await loadImage({
       src: url,
-      crossOrigin: this.inputCropperOptions.crossOrigin,
+      crossOrigin: this.inputCropperOptions.crossOrigin
     });
     return {
       isStatic: imageInfo?.imageType?.mime !== 'image/gif',
-      imageInfo,
+      imageInfo
     };
   }
 
-  private async handleStaticImage(imageInstance: HTMLImageElement): Promise<string | Blob> {
+  private async handleStaticImage(imageInfo: IImageLoadData): Promise<string | Blob> {
+    const { imageInstance, imageType } = imageInfo;
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
 
@@ -231,20 +234,25 @@ export class SuperImageCropper {
 
     return new Promise((resolve, reject) => {
       const { outputType = OutputType.BLOB_URL } = this.inputCropperOptions;
+      const quality = (this.inputCropperOptions?.quality ?? 100) / 100;
 
       if (outputType === OutputType.BASE64) {
-        resolve(canvas.toDataURL(this.imageTypeInfo?.mime));
+        resolve(canvas.toDataURL(imageType?.mime, quality));
       } else {
-        canvas.toBlob((blob) => {
-          if (!blob) return reject(null);
-          if (outputType === OutputType.BLOB) {
-            resolve(blob);
-          } else {
-            const blobUrl = window.URL.createObjectURL(blob);
-            resolve(blobUrl);
-          }
-        }, this.imageTypeInfo?.mime)
+        canvas.toBlob(
+          blob => {
+            if (!blob) return reject(null);
+            if (outputType === OutputType.BLOB) {
+              resolve(blob);
+            } else {
+              const blobUrl = window.URL.createObjectURL(blob);
+              resolve(blobUrl);
+            }
+          },
+          imageType?.mime,
+          quality
+        );
       }
-    })
+    });
   }
 }
