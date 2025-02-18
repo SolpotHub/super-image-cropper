@@ -1,5 +1,5 @@
 {
-  "name": "super-image-cropper",
+  "name": "@solpothub/super-image-cropper",
   "version": "1.0.23",
   "main": "dist/index.js",
   "module": "esm/index.js",
@@ -20,7 +20,7 @@
     "esm",
     "package.json"
   ],
-  "repository": "git@github.com:STDSuperman/super-image-cropper.git",
+  "repository": "git@github.com:SolpotHub/super-image-cropper.git",
   "author": "STDSuperman <2750556766@qq.com>",
   "license": "MIT",
   "scripts": {
@@ -46,7 +46,7 @@
   },
   "dependencies": {
     "cropperjs": "^1.5.12",
-    "gif-build-worker-js": "workspace:*",
+    "gif-build-worker-js": "^1.0.3",
     "gif.js": "^0.2.0",
     "gifuct-js": "^2.1.2",
     "image-type": "^4.1.0",

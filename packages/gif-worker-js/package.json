@@ -1,5 +1,5 @@
 {
-  "name": "gif-build-worker-js",
+  "name": "@solpothub/gif-build-worker-js",
   "version": "1.0.3",
   "main": "dist/index.js",
   "module": "esm/index.js",
